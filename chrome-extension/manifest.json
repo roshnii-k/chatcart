@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "ChatCart WhatsApp Monitor",
+  "version": "0.1.0",
+  "description": "Monitor WhatsApp Web order messages and create ChatCart review drafts.",
+  "permissions": ["storage", "notifications", "scripting"],
+  "host_permissions": ["https://web.whatsapp.com/*", "http://127.0.0.1:8000/*", "http://localhost:8000/*"],
+  "background": { "service_worker": "service-worker.js" },
+  "action": { "default_title": "ChatCart WhatsApp Monitor", "default_popup": "popup.html" },
+  "content_scripts": [{ "matches": ["https://web.whatsapp.com/*"], "js": ["content.js"], "run_at": "document_idle" }]
+}
