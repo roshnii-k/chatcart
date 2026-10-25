@@ -19,6 +19,7 @@ class OrderFields(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     customer_name: str | None = None
+    customer_phone: str | None = Field(default=None, max_length=40)
     product_name: str | None = None
     quantity: int | None = Field(default=None, gt=0)
     unit_price: float | None = Field(default=None, gt=0, allow_inf_nan=False)
@@ -35,6 +36,7 @@ class OrderPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     customer_name: str | None = None
+    customer_phone: str | None = Field(default=None, max_length=40)
     product_name: str | None = None
     quantity: int | None = Field(default=None, gt=0)
     unit_price: float | None = Field(default=None, gt=0, allow_inf_nan=False)

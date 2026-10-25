@@ -15,14 +15,17 @@ def client(tmp_path, monkeypatch):
         yield test_client
 
 
-def submit(client, message, *, source="manual", event_id=None):
-    return client.post("/api/message-events", json={
+def submit(client, message, *, source="manual", event_id=None, sender_phone=None):
+    payload = {
         "event_id": event_id or str(uuid4()),
         "source": source,
         "message": message,
         "sender_name": "Asha",
-        "sender_id": "chat-42",
-    })
+        "sender_id": sender_phone or "chat-42",
+    }
+    if sender_phone:
+        payload["sender_phone"] = sender_phone
+    return client.post("/api/message-events", json=payload)
 
 
 def complete_message():
@@ -72,15 +75,63 @@ def test_missing_fields_persist_as_clarification_draft(client):
 
 def test_duplicate_event_and_duplicate_order_are_flagged(client):
     event_id = str(uuid4())
-    first = submit(client, complete_message(), event_id=event_id).json()
+    phone = "+919876543210"
+    first = submit(client, complete_message(), event_id=event_id, sender_phone=phone).json()
     replay = submit(client, complete_message(), event_id=event_id).json()
     assert replay["event_id"] == first["event_id"]
     assert len(client.get("/api/message-events").json()) == 1
 
     client.post(f"/api/message-events/{event_id}/save-draft")
-    repeated = submit(client, complete_message()).json()
+    repeated = submit(client, complete_message(), sender_phone=phone).json()
     assert repeated["processing_state"] == "duplicate_warning"
+    assert repeated["same_sender_repeat"] is True
     assert repeated["extraction"]["possible_duplicates"]
+
+
+def test_repeat_order_requires_seller_confirmation_and_creates_second_draft(client):
+    phone = "+919876543210"
+    first = submit(client, complete_message(), sender_phone=phone).json()
+    original = client.post(f"/api/message-events/{first['event_id']}/save-draft").json()["order"]
+    repeated = submit(client, complete_message(), sender_phone="919876543210").json()
+
+    assert repeated["processing_state"] == "duplicate_warning"
+    assert repeated["extraction"]["possible_duplicates"] == [original["order_id"]]
+    blocked = client.post(f"/api/message-events/{repeated['event_id']}/save-draft")
+    assert blocked.status_code == 409
+
+    saved = client.post(f"/api/message-events/{repeated['event_id']}/confirm-repeat")
+    assert saved.status_code == 200
+    assert saved.json()["event"]["repeat_order_confirmed"] is True
+    assert saved.json()["order"]["order_id"] != original["order_id"]
+    assert saved.json()["order"]["customer_phone"] == phone
+    assert len(client.get("/api/orders").json()) == 2
+
+    replay = client.post(f"/api/message-events/{repeated['event_id']}/confirm-repeat")
+    assert replay.json()["order"]["order_id"] == saved.json()["order"]["order_id"]
+    assert len(client.get("/api/orders").json()) == 2
+
+
+def test_same_order_from_different_phone_is_not_flagged_as_repeat(client):
+    first = submit(client, complete_message(), sender_phone="+919876543210").json()
+    client.post(f"/api/message-events/{first['event_id']}/save-draft")
+
+    other_sender = submit(client, complete_message(), sender_phone="+919876543211").json()
+
+    assert other_sender["processing_state"] == "needs_seller_review"
+    assert other_sender["extraction"]["possible_duplicates"] == []
+
+
+def test_repeat_alert_can_be_dismissed(client):
+    phone = "+919876543210"
+    first = submit(client, complete_message(), sender_phone=phone).json()
+    client.post(f"/api/message-events/{first['event_id']}/save-draft")
+    repeated = submit(client, complete_message(), sender_phone=phone).json()
+
+    dismissed = client.post(f"/api/message-events/{repeated['event_id']}/dismiss-repeat")
+
+    assert dismissed.status_code == 200
+    assert dismissed.json()["processing_state"] == "duplicate_dismissed"
+    assert len(client.get("/api/orders").json()) == 1
 
 
 def test_correction_is_proposed_then_approved_without_silent_mutation(client):
@@ -143,3 +194,32 @@ def test_whatsapp_message_with_missing_details_becomes_reviewable_draft(client):
     replay = client.post(f"/api/message-events/{event_id}/save-draft")
     assert replay.json()["order"]["order_id"] == saved.json()["order"]["order_id"]
     assert len(client.get("/api/orders").json()) == 1
+
+
+def test_whatsapp_sender_name_is_used_as_customer_name_when_not_in_message(client):
+    response = client.post("/api/message-events", json={
+        "event_id": str(uuid4()),
+        "source": "whatsapp_web",
+        "message": complete_message(),
+        "sender_name": "Asha",
+        "sender_phone": "+919876543210",
+    })
+    event = response.json()
+    saved = client.post(f"/api/message-events/{event['event_id']}/save-draft")
+
+    assert response.status_code == 201
+    assert saved.status_code == 200
+    assert saved.json()["event"]["sender_name"] == "Asha"
+    assert saved.json()["event"]["sender_phone"] == "+919876543210"
+    assert saved.json()["order"]["customer_name"] == "Asha"
+    assert saved.json()["order"]["customer_phone"] == "+919876543210"
+
+
+def test_sender_phone_can_be_edited_on_order(client):
+    order = complete_order(client)
+    response = client.patch(f"/api/orders/{order['order_id']}", json={
+        "customer_phone": "+919876543210",
+    })
+
+    assert response.status_code == 200
+    assert response.json()["customer_phone"] == "+919876543210"

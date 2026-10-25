@@ -128,13 +128,13 @@ def export_orders() -> Response:
     stream = io.StringIO(newline="")
     writer = csv.writer(stream)
     writer.writerow(
-        ["order_id", "customer_name", "product_name", "quantity", "unit_price",
+        ["order_id", "customer_name", "customer_phone", "product_name", "quantity", "unit_price",
          "total_price", "delivery_date", "delivery_address", "special_instructions",
          "original_message", "status", "created_at", "updated_at"]
     )
     for order in orders:
         writer.writerow([
-            order.order_id, order.customer_name, order.product_name, order.quantity,
+            order.order_id, order.customer_name, order.customer_phone, order.product_name, order.quantity,
             order.unit_price, order.total_price, order.delivery_date, order.delivery_address,
             order.special_instructions, order.original_message, order.status.value,
             order.created_at.isoformat(), order.updated_at.isoformat(),
@@ -212,6 +212,20 @@ def update_status(order_id: str, request: StatusUpdate) -> Order:
     current = safe_db(lambda: store.get_order(order_id))
     if current is None:
         raise HTTPException(status_code=404, detail="Order was not found.")
+    if request.status == OrderStatus.COMPLETED:
+        unresolved = [
+            field for field in REQUIRED_CONFIRMATION_FIELDS
+            if getattr(current, field) is None or getattr(current, field) == ""
+        ]
+        if unresolved or current.validation_issues:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Resolve required order details before completing.",
+                    "missing_fields": unresolved,
+                    "validation_issues": current.validation_issues,
+                },
+            )
     updated = current.model_copy(
         update={"status": request.status, "updated_at": datetime.now(timezone.utc)}
     )

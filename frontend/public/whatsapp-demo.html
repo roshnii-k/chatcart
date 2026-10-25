@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#edf2ef" />
+    <meta name="description" content="A WhatsApp-style simulated inbox for the ChatCart demo." />
+    <title>WhatsApp-style Chat · Simulated ChatCart demo</title>
+    <link rel="stylesheet" href="/whatsapp-demo.css" />
+  </head>
+  <body>
+    <main class="demo-shell">
+      <header class="demo-banner">
+        <span class="demo-banner-mark" aria-hidden="true">C</span>
+        <div>
+          <strong>WhatsApp-style chat · ChatCart demo</strong>
+          <span>SIMULATED · Not connected to WhatsApp · No real messages</span>
+        </div>
+        <a href="/">Open ChatCart portal</a>
+      </header>
+
+      <section class="inbox" aria-label="Simulated customer chat">
+        <aside class="chat-list">
+          <div class="chat-list-heading"><span>Demo messages</span><span class="demo-badge">SIMULATED</span></div>
+          <button class="contact active" type="button">
+            <span class="avatar">DC</span>
+            <span class="contact-copy"><strong class="demo-contact-name">Demo customer</strong><small>Use the form to simulate a message</small></span>
+            <span class="contact-time">Demo</span>
+          </button>
+          <div class="chat-list-note">This page imitates a simple chat layout for testing the ChatCart browser extension. It is not affiliated with or connected to WhatsApp.</div>
+        </aside>
+
+        <section class="conversation" aria-label="Demo customer conversation">
+          <header class="conversation-heading">
+            <span class="avatar">DC</span>
+            <div><strong class="demo-contact-name">Demo customer</strong><small>Simulated conversation</small></div>
+            <span class="simulated-label">LOCAL DEMO</span>
+          </header>
+
+          <div class="chat-history" id="chat-history" aria-live="polite" aria-label="Conversation messages">
+            <div class="system-note">This is a simulated WhatsApp-style chat for demonstrating ChatCart. Messages are not sent or received by WhatsApp.</div>
+            <div class="empty-chat" id="empty-chat">Add an example below to simulate a new incoming customer message.</div>
+          </div>
+
+          <form class="composer" id="message-form">
+            <label class="sender-label" for="sender-name">Incoming sender name</label>
+            <input class="sender-input" id="sender-name" maxlength="200" value="Demo customer" placeholder="Customer name or visible phone number" />
+            <label class="sender-label" for="sender-phone">Incoming phone number <span>(optional demo data)</span></label>
+            <input class="sender-input" id="sender-phone" type="tel" maxlength="40" placeholder="+91 98765 43210" />
+            <label class="sr-only" for="message-text">Simulated customer message</label>
+            <textarea id="message-text" maxlength="4000" rows="3" placeholder="Type a sample customer order message…" required></textarea>
+            <div class="composer-footer">
+              <span>Demo messages stay in this browser tab.</span>
+              <button type="submit">Simulate incoming message</button>
+            </div>
+          </form>
+          <div class="quick-examples" aria-label="Sample messages">
+            <span>Try a sample:</span>
+            <button type="button" data-message="I need 3 chocolate cakes at ₹500 each for tomorrow. Deliver to Rose Villa, Thrissur.">Complete order</button>
+            <button type="button" data-message="I need 2 pies.">Needs clarification</button>
+          </div>
+          <p class="result" id="result" role="status"></p>
+        </section>
+      </section>
+    </main>
+    <script src="/whatsapp-demo.js"></script>
+  </body>
+</html>

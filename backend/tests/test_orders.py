@@ -177,6 +177,24 @@ def test_edit_preserves_active_order_status(client):
     assert updated.json()["status"] == "In Progress"
 
 
+def test_completed_status_requires_complete_valid_order(client):
+    incomplete = client.post("/api/orders", json=complete_payload(quantity=None)).json()
+    blocked = client.post(
+        f"/api/orders/{incomplete['order_id']}/status",
+        json={"status": "Completed"},
+    )
+    assert blocked.status_code == 409
+    assert "quantity" in blocked.json()["detail"]["missing_fields"]
+
+    complete = client.post("/api/orders", json=complete_payload()).json()
+    response = client.post(
+        f"/api/orders/{complete['order_id']}/status",
+        json={"status": "Completed"},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "Completed"
+
+
 def test_health_endpoint(client):
     response = client.get("/api/health")
     assert response.status_code == 200

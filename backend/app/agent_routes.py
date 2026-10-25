@@ -13,9 +13,9 @@ def _uuid(value,label):
     try: return str(UUID(value))
     except ValueError as exc: raise HTTPException(400,detail=f"{label} must be a valid UUID.") from exc
 
-def _extract(message):
+def _extract(message,*,include_message_duplicates=True):
     order,issues=extract_order(message)
-    duplicates=store.find_exact_message(message)
+    duplicates=store.find_exact_message(message) if include_message_duplicates else []
     correction=find_correction(message)
     proposal_data=None
     if correction:
@@ -41,7 +41,9 @@ def receive_event(request:MessageEventRequest):
     event_id=str(request.event_id)
     existing=agent_store.get_event(event_id)
     if existing: return existing
-    extraction=_extract(request.message)
+    extraction=_extract(request.message,include_message_duplicates=False)
+    duplicates=store.find_same_sender_order(extraction.order,request.sender_phone)
+    extraction=extraction.model_copy(update={"possible_duplicates":duplicates})
     digest=agent_store.message_hash(request.message)
     prior=agent_store.find_matching_event(request.source,request.sender_id,digest,event_id)
     proposal=None
@@ -55,26 +57,58 @@ def receive_event(request:MessageEventRequest):
     elif prior and prior.processing_state!="failed": state="duplicate_event"
     else: state="needs_seller_review"
     event=get_source_adapter(request.source).make_event(request,extraction,state)
+    event=event.model_copy(update={"same_sender_repeat":bool(duplicates)})
     if proposal: event=event.model_copy(update={"proposal_id":proposal.proposal_id})
     if state=="duplicate_event" and prior: event=event.model_copy(update={"duplicate_event_id":prior.event_id})
     return agent_store.insert_event(event,digest,proposal)[0]
 
-@router.post("/message-events/{event_id}/save-draft",response_model=SavedDraftResult)
-def save_draft(event_id:str):
-    event=agent_store.get_event(_uuid(event_id,"event_id"))
+def _save_event_draft(event:MessageEvent,*,confirm_repeat=False):
     if not event: raise HTTPException(404,detail="Message event was not found.")
     if event.order_id:
         order=store.get_order(event.order_id)
         if not order: raise HTTPException(500,detail="Linked order could not be loaded.")
         return SavedDraftResult(event=event,order=order)
-    if event.processing_state in {"duplicate_warning","duplicate_event","correction_proposed"}:
+    if confirm_repeat:
+        if event.processing_state!="duplicate_warning" or not event.same_sender_repeat:
+            raise HTTPException(409,detail="This message is not a pending repeat order.")
+        if not event.sender_phone:
+            raise HTTPException(409,detail="A sender phone number is required to confirm a repeat order.")
+    elif event.processing_state in {"duplicate_warning","duplicate_event","correction_proposed"}:
         raise HTTPException(409,detail="Review the duplicate or correction warning before saving a draft.")
+    prior_order=(
+      store.get_order(event.extraction.possible_duplicates[0])
+      if confirm_repeat and event.extraction.possible_duplicates else None
+    )
     order=event.extraction.order.model_copy(update={"original_message":event.original_message,
+      "customer_name":event.extraction.order.customer_name or event.sender_name or (prior_order.customer_name if prior_order else None),
+      "customer_phone":(prior_order.customer_phone if prior_order else event.sender_phone),
       "validation_issues":event.extraction.validation_issues,"updated_at":datetime.now(timezone.utc)})
     order=refresh_order(order,preserve_timestamps=False)
+    event=event.model_copy(update={"repeat_order_confirmed":confirm_repeat})
     try: saved_event,order=agent_store.persist_draft(event,order)
     except LookupError as exc: raise HTTPException(404,detail=str(exc)) from exc
     return SavedDraftResult(event=saved_event,order=order)
+
+@router.post("/message-events/{event_id}/save-draft",response_model=SavedDraftResult)
+def save_draft(event_id:str):
+    event=agent_store.get_event(_uuid(event_id,"event_id"))
+    if not event: raise HTTPException(404,detail="Message event was not found.")
+    return _save_event_draft(event)
+
+@router.post("/message-events/{event_id}/confirm-repeat",response_model=SavedDraftResult)
+def confirm_repeat(event_id:str):
+    event=agent_store.get_event(_uuid(event_id,"event_id"))
+    if not event: raise HTTPException(404,detail="Message event was not found.")
+    return _save_event_draft(event,confirm_repeat=True)
+
+@router.post("/message-events/{event_id}/dismiss-repeat",response_model=MessageEvent)
+def dismiss_repeat(event_id:str):
+    event=agent_store.get_event(_uuid(event_id,"event_id"))
+    if not event: raise HTTPException(404,detail="Message event was not found.")
+    if event.processing_state!="duplicate_warning" or not event.same_sender_repeat:
+        raise HTTPException(409,detail="This message is not a pending repeat order.")
+    dismissed=event.model_copy(update={"processing_state":"duplicate_dismissed"})
+    return agent_store.update_event(dismissed)
 
 @router.get("/change-proposals",response_model=list[ChangeProposal])
 def proposals(state:str|None=Query(default="Pending")):

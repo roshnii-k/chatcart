@@ -17,15 +17,6 @@ async function hash(id, text) {
 async function notify(title, message) {
   return chrome.notifications.create({ type: "basic", iconUrl: "icon.png", title, message });
 }
-async function focusWhatsApp(tab) {
-  if (!tab?.id) return;
-  try {
-    await chrome.tabs.update(tab.id, { active: true });
-    if (Number.isInteger(tab.windowId)) await chrome.windows.update(tab.windowId, { focused: true });
-  } catch (error) {
-    console.warn("ChatCart could not focus the WhatsApp Web tab", error);
-  }
-}
 function looksLikeOrder(text) {
   return /\b(order|need|want|buy|purchase|deliver|delivery|send me|i['’]?d like|i would like|can i get|could i get|book|reserve|i['’]?ll take|i will take|please make|make me|change|correction|instead|actually)\b/i.test(text)
     || /\b\d+\s+(?:[-a-z]+\s+){0,3}(?:cakes?|cookies?|cupcakes?|loaves?|boxes?|bottles?|items?|pieces?|pcs)\b/i.test(text);
@@ -51,15 +42,21 @@ async function processMessage(message, sourceTab) {
       source: "whatsapp_web",
       message: text,
       sender_name: message.sender || null,
+      sender_phone: message.senderPhone || null,
     }) });
     if (event.processing_state === "correction_proposed") {
       await chrome.storage.local.set({ [SEEN]: [...seen.slice(-499), key] });
       await notify("ChatCart correction needs review", "A change proposal was added to ChatCart. Review it before applying.");
       return true;
     }
-    if (["duplicate_warning", "duplicate_event"].includes(event.processing_state)) {
+    if (event.processing_state === "duplicate_warning") {
       await chrome.storage.local.set({ [SEEN]: [...seen.slice(-499), key] });
-      await notify("ChatCart found a possible repeat", "Review the message in ChatCart activity. No second order was created.");
+      await notify("ChatCart found a possible repeat", "A repeat-order confirmation is waiting in ChatCart. No second order was created.");
+      return true;
+    }
+    if (event.processing_state === "duplicate_event") {
+      await chrome.storage.local.set({ [SEEN]: [...seen.slice(-499), key] });
+      await notify("ChatCart ignored a repeated message", "This message event was already processed. No second order was created.");
       return true;
     }
     const { order } = await api(`/api/message-events/${encodeURIComponent(event.event_id)}/save-draft`, { method: "POST" });

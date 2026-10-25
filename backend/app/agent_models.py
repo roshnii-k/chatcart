@@ -12,6 +12,7 @@ class MessageEventRequest(BaseModel):
     source: SourceId
     message: str = Field(min_length=1, max_length=4000)
     sender_name: str | None = Field(default=None, max_length=200)
+    sender_phone: str | None = Field(default=None, max_length=40)
     sender_id: str | None = Field(default=None, max_length=200)
     occurred_at: datetime | None = None
 
@@ -19,6 +20,7 @@ class MessageEvent(BaseModel):
     event_id: str
     source: SourceId
     sender_name: str | None = None
+    sender_phone: str | None = None
     sender_id: str | None = None
     occurred_at: datetime | None = None
     received_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -28,6 +30,8 @@ class MessageEvent(BaseModel):
     order_id: str | None = None
     proposal_id: str | None = None
     duplicate_event_id: str | None = None
+    same_sender_repeat: bool = False
+    repeat_order_confirmed: bool = False
     demo_mode: bool = False
 
 class ChangeProposal(BaseModel):

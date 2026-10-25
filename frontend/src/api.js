@@ -67,21 +67,12 @@ export async function exportConfirmedOrders() {
   return request("/api/orders/export.csv");
 }
 
-export async function createMessageEvent(payload) {
-  return (await request("/api/message-events", { method: "POST", body: JSON.stringify(payload) })).json();
-}
 export async function getMessageEvents() {
-  return (await request("/api/message-events")).json();
+  return (await request("/api/message-events?limit=100")).json();
 }
-export async function getAgentSources() {
-  return (await request("/api/agent/sources")).json();
+export async function confirmRepeatedOrder(eventId) {
+  return (await request("/api/message-events/" + encodeURIComponent(eventId) + "/confirm-repeat", { method: "POST" })).json();
 }
-export async function saveMessageEventDraft(eventId) {
-  return (await request("/api/message-events/" + encodeURIComponent(eventId) + "/save-draft", { method: "POST" })).json();
-}
-export async function getChangeProposals(state = "Pending") {
-  return (await request("/api/change-proposals?state=" + encodeURIComponent(state))).json();
-}
-export async function decideChangeProposal(proposalId, decision) {
-  return (await request("/api/change-proposals/" + encodeURIComponent(proposalId) + "/" + decision, { method: "POST" })).json();
+export async function dismissRepeatedOrder(eventId) {
+  return (await request("/api/message-events/" + encodeURIComponent(eventId) + "/dismiss-repeat", { method: "POST" })).json();
 }

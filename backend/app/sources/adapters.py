@@ -12,7 +12,8 @@ class ManualPasteAdapter:
     demo_mode = False
     def make_event(self, request, extraction, state):
         return MessageEvent(event_id=str(request.event_id), source=self.source_id,
-            sender_name=request.sender_name, sender_id=request.sender_id,
+            sender_name=request.sender_name, sender_phone=request.sender_phone,
+            sender_id=request.sender_id or request.sender_phone,
             occurred_at=request.occurred_at, original_message=request.message,
             processing_state=state, extraction=extraction, demo_mode=False)
 

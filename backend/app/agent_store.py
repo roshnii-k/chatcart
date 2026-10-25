@@ -26,6 +26,14 @@ def get_event(event_id):
         row=db.execute("SELECT payload FROM message_events WHERE event_id=?",(event_id,)).fetchone()
     return MessageEvent.model_validate_json(row["payload"]) if row else None
 
+def update_event(event):
+    ensure_tables()
+    with connection_scope() as db:
+        db.execute("UPDATE message_events SET payload=? WHERE event_id=?",
+          (event.model_dump_json(),event.event_id))
+        row=db.execute("SELECT payload FROM message_events WHERE event_id=?",(event.event_id,)).fetchone()
+    return MessageEvent.model_validate_json(row["payload"]) if row else None
+
 def find_matching_event(source,sender_id,digest,exclude_id):
     ensure_tables()
     with connection_scope() as db:

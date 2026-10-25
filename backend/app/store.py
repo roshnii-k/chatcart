@@ -1,5 +1,5 @@
 from .database import connection_scope, initialize_database
-from .models import Order
+from .models import Order, REQUIRED_CONFIRMATION_FIELDS
 
 
 def _prepare() -> None:
@@ -52,6 +52,37 @@ def find_exact_message(message: str) -> list[str]:
         order.order_id
         for order in list_orders()
         if normalized and " ".join(order.original_message.casefold().split()) == normalized
+    ]
+
+
+def _normalize_phone(phone: str | None) -> str:
+    return "".join(character for character in phone or "" if character.isdigit())
+
+
+def _duplicate_signature(order: Order) -> tuple | None:
+    if any(getattr(order, field) in (None, "") for field in REQUIRED_CONFIRMATION_FIELDS):
+        return None
+    normalize_text = lambda value: " ".join((value or "").casefold().split())
+    return (
+        normalize_text(order.product_name),
+        order.quantity,
+        round(order.unit_price, 2),
+        order.delivery_date,
+        normalize_text(order.delivery_address),
+        normalize_text(order.special_instructions),
+    )
+
+
+def find_same_sender_order(order: Order, sender_phone: str | None) -> list[str]:
+    phone = _normalize_phone(sender_phone)
+    signature = _duplicate_signature(order)
+    if not phone or signature is None:
+        return []
+    return [
+        existing.order_id
+        for existing in list_orders()
+        if _normalize_phone(existing.customer_phone) == phone
+        and _duplicate_signature(existing) == signature
     ]
 
 
